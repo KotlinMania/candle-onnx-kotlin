@@ -16,3 +16,16 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "candle-onnx-kotlin"
+
+listOf(
+    "../candle-kotlin",
+    "../candle-nn-kotlin",
+    "../prost-kotlin",
+    "../bytes-kotlin",
+    "../thiserror-kotlin",
+    "../km-io",
+).forEach { path ->
+    if (file(path).exists()) {
+        includeBuild(path)
+    }
+}

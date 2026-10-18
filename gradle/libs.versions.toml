@@ -9,6 +9,12 @@ detekt = "2.0.0-alpha.6"
 ktlint = "14.2.0"
 ktlintEngine = "1.8.0"
 kotlinxBenchmark = "0.5.0"
+candle = "0.2.1"
+candleNn = "0.1.1"
+prost = "0.1.1"
+bytes = "0.2.2"
+thiserror = "0.2.1"
+kmIo = "0.2.0"
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
@@ -26,6 +32,13 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "collectionsImmutable" }
 kotlinx-benchmark-runtime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-runtime", version.ref = "kotlinxBenchmark" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+candle-kotlin = { module = "io.github.kotlinmania:candle-kotlin", version.ref = "candle" }
+candle-nn-kotlin = { module = "io.github.kotlinmania:candle-nn-kotlin", version.ref = "candleNn" }
+prost-kotlin = { module = "io.github.kotlinmania:prost-kotlin", version.ref = "prost" }
+bytes-kotlin = { module = "io.github.kotlinmania:bytes-kotlin", version.ref = "bytes" }
+thiserror-kotlin = { module = "io.github.kotlinmania:thiserror-kotlin", version.ref = "thiserror" }
+km-io = { module = "io.github.kotlinmania:km-io", version.ref = "kmIo" }
 
 [bundles]
 candleonnx-commonMain = [
@@ -34,4 +47,13 @@ candleonnx-commonMain = [
   "kotlinx-serialization-json",
   "kotlinx-datetime",
   "collections-immutable",
+  "candle-kotlin",
+  "candle-nn-kotlin",
+  "prost-kotlin",
+  "bytes-kotlin",
+  "thiserror-kotlin",
+  "km-io",
+]
+candleonnx-commonTest = [
+  "kotlinx-coroutines-test",
 ]
