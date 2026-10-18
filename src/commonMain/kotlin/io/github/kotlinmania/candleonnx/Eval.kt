@@ -246,13 +246,11 @@ public fun getTensor(t: TensorProto, name: String): Tensor {
     }
 }
 
-/**
- * This function provides a direct evaluation of the proto.
- * Longer-term, we should first convert the proto to an intermediate representation of the compute
- * graph so as to make multiple evaluations more efficient.
- * An example upside of this would be to remove intermediary values when they are not needed
- * anymore.
- */
+// This function provides a direct evaluation of the proto.
+// Longer-term, we should first convert the proto to an intermediate representation of the compute
+// graph so as to make multiple evaluations more efficient.
+// An example upside of this would be to remove intermediary values when they are not needed
+// anymore.
 public fun simpleEval(
     model: ModelProto,
     inputs: MutableMap<String, Value>,
@@ -1009,17 +1007,17 @@ public fun simpleEval_(
                             if (padsPre[i] == 0L && padsPost[i] == 0L) {
                                 continue
                             }
+                            fun zigzag(min: Long, max: Long): Sequence<Long> = sequence {
+                                while (true) {
+                                    for (v in min until max) yield(v)
+                                    for (v in max downTo (min + 1L)) yield(v)
+                                }
+                            }
                             val idxTensor = if (dim > 1) {
                                 val cycleLen = dim * 2 - 2
                                 val skip = cycleLen - (padsPre[i].toInt() % cycleLen)
                                 val count = padsPre[i].toInt() + dim + padsPost[i].toInt()
-                                val seq = sequence {
-                                    while (true) {
-                                        for (v in 0L until (dim - 1).toLong()) yield(v)
-                                        for (v in (dim - 1).toLong() downTo 1L) yield(v)
-                                    }
-                                }
-                                val idxList = seq.drop(skip).take(count).toList()
+                                val idxList = zigzag(0L, (dim - 1).toLong()).drop(skip).take(count).toList()
                                 Tensor.fromSlice(idxList.toLongArray(), Shape(idxList.size), out.device())
                             } else {
                                 Tensor.full(0L, Shape(dim), out.device())
@@ -1640,11 +1638,11 @@ public fun simpleEval_(
                 val finalOutput = if (axis.toInt() == output.rank() - 1) {
                     output
                 } else {
-                    fun moveAxisTo(r: Int, from: Int, to: Int): List<Int> {
-                        val d = (0 until r).toMutableList()
-                        val ax = d.removeAt(from)
-                        d.add(to, ax)
-                        return d
+                    fun moveAxisTo(rank: Int, from: Int, to: Int): List<Int> {
+                        val dims = (0 until rank).toMutableList()
+                        val axisVal = dims.removeAt(from)
+                        dims.add(to, axisVal)
+                        return dims
                     }
                     val perm = moveAxisTo(output.rank(), output.rank() - 1, axis.toInt())
                     output.permute(perm)
@@ -1891,7 +1889,7 @@ public inline fun <reified T> toScalarFlexible(t: Tensor): T {
 }
 
 /**
- * Same as to_scalar_flexible but returns via to_vec0 for types that need it.
+ * Same as toScalarFlexible but returns via toVec0 for types that need it.
  */
 public inline fun <reified T> toVec0Flexible(t: Tensor): T {
     return if (t.rank() > 0 && t.elemCount() == 1) {
