@@ -6,16 +6,20 @@ import io.github.kotlinmania.io.buffered
 import io.github.kotlinmania.io.files.Path
 import io.github.kotlinmania.io.files.SystemFileSystem
 import io.github.kotlinmania.io.readByteArray
-import io.github.kotlinmania.io.use
 
 public fun readFile(p: Path): ModelProto {
-    val buf = try {
-        SystemFileSystem.source(p).buffered().use { it.readByteArray() }
+    val src = try {
+        SystemFileSystem.source(p).buffered()
     } catch (e: Exception) {
         throw CandleException.wrap(e)
     }
+    val bytes = try {
+        src.readByteArray()
+    } finally {
+        src.close()
+    }
     return try {
-        ModelProto.decode(buf)
+        ModelProto.decode(bytes).getOrThrow()
     } catch (e: Exception) {
         throw CandleException.wrap(e)
     }

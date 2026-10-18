@@ -30,7 +30,7 @@ public data class TrainingInfoProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
             1u -> {
                 val init = initialization ?: GraphProto().also { initialization = it }
@@ -40,15 +40,24 @@ public data class TrainingInfoProto(
                 val alg = algorithm ?: GraphProto().also { algorithm = it }
                 MessageEncoding.merge(wireType, alg, buf, ctx)
             }
-            3u -> initializationBinding.add(
-                MessageEncoding.decode(wireType, StringStringEntryProto(), buf, ctx),
-            )
-            4u -> updateBinding.add(
-                MessageEncoding.decode(wireType, StringStringEntryProto(), buf, ctx),
-            )
+            3u -> {
+                val entry = StringStringEntryProto()
+                val res = MessageEncoding.merge(wireType, entry, buf, ctx)
+                if (res.isSuccess) {
+                    initializationBinding.add(entry)
+                    Result.success(Unit)
+                } else res
+            }
+            4u -> {
+                val entry = StringStringEntryProto()
+                val res = MessageEncoding.merge(wireType, entry, buf, ctx)
+                if (res.isSuccess) {
+                    updateBinding.add(entry)
+                    Result.success(Unit)
+                } else res
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -71,10 +80,10 @@ public data class TrainingInfoProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): TrainingInfoProto {
-            val msg = TrainingInfoProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<TrainingInfoProto> =
+            io.github.kotlinmania.prost.decode(buf) { TrainingInfoProto() }
+
+        public fun decode(bytes: ByteArray): Result<TrainingInfoProto> =
+            io.github.kotlinmania.prost.decode(bytes) { TrainingInfoProto() }
     }
 }

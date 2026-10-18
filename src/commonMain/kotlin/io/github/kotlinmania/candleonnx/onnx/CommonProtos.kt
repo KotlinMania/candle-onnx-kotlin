@@ -58,13 +58,28 @@ public data class StringStringEntryProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> key = StringEncoding.decode(wireType, buf, ctx)
-            2u -> value = StringEncoding.decode(wireType, buf, ctx)
+            1u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    key = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            2u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    value = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -79,11 +94,11 @@ public data class StringStringEntryProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): StringStringEntryProto {
-            val msg = StringStringEntryProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<StringStringEntryProto> =
+            io.github.kotlinmania.prost.decode(buf) { StringStringEntryProto() }
+
+        public fun decode(bytes: ByteArray): Result<StringStringEntryProto> =
+            io.github.kotlinmania.prost.decode(bytes) { StringStringEntryProto() }
     }
 }
 
@@ -103,15 +118,29 @@ public data class TensorAnnotation(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> tensorName = StringEncoding.decode(wireType, buf, ctx)
-            2u -> quantParameterTensorNames.add(
-                MessageEncoding.decode(wireType, StringStringEntryProto(), buf, ctx),
-            )
+            1u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    tensorName = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            2u -> {
+                val entry = StringStringEntryProto()
+                val res = MessageEncoding.merge(wireType, entry, buf, ctx)
+                if (res.isSuccess) {
+                    quantParameterTensorNames.add(entry)
+                    Result.success(Unit)
+                } else {
+                    res
+                }
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -128,11 +157,11 @@ public data class TensorAnnotation(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): TensorAnnotation {
-            val msg = TensorAnnotation()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<TensorAnnotation> =
+            io.github.kotlinmania.prost.decode(buf) { TensorAnnotation() }
+
+        public fun decode(bytes: ByteArray): Result<TensorAnnotation> =
+            io.github.kotlinmania.prost.decode(bytes) { TensorAnnotation() }
     }
 }
 
@@ -142,8 +171,6 @@ public data class ValueInfoProto(
     var docString: String = "",
 ) : Message {
     public fun type(): TypeProto? = type
-
-    public fun r#type(): TypeProto? = type
 
     override fun encodeRaw(buf: BufMut) {
         if (name.isNotEmpty()) StringEncoding.encode(1u, name, buf)
@@ -156,17 +183,32 @@ public data class ValueInfoProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> name = StringEncoding.decode(wireType, buf, ctx)
+            1u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    name = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
             2u -> {
                 val t = type ?: TypeProto().also { type = it }
                 MessageEncoding.merge(wireType, t, buf, ctx)
             }
-            3u -> docString = StringEncoding.decode(wireType, buf, ctx)
+            3u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    docString = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -183,11 +225,11 @@ public data class ValueInfoProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): ValueInfoProto {
-            val msg = ValueInfoProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<ValueInfoProto> =
+            io.github.kotlinmania.prost.decode(buf) { ValueInfoProto() }
+
+        public fun decode(bytes: ByteArray): Result<ValueInfoProto> =
+            io.github.kotlinmania.prost.decode(bytes) { ValueInfoProto() }
     }
 }
 
@@ -207,7 +249,7 @@ public data class SparseTensorProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
             1u -> {
                 val v = values ?: TensorProto().also { values = it }
@@ -217,10 +259,9 @@ public data class SparseTensorProto(
                 val i = indices ?: TensorProto().also { indices = it }
                 MessageEncoding.merge(wireType, i, buf, ctx)
             }
-            3u -> Int64Encoding.decodeRepeated(wireType, dims, buf, ctx)
+            3u -> Int64Encoding.mergeRepeated(wireType, dims, buf, ctx)
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -237,11 +278,11 @@ public data class SparseTensorProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): SparseTensorProto {
-            val msg = SparseTensorProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<SparseTensorProto> =
+            io.github.kotlinmania.prost.decode(buf) { SparseTensorProto() }
+
+        public fun decode(bytes: ByteArray): Result<SparseTensorProto> =
+            io.github.kotlinmania.prost.decode(bytes) { SparseTensorProto() }
     }
 }
 
@@ -259,13 +300,28 @@ public data class OperatorSetIdProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> domain = StringEncoding.decode(wireType, buf, ctx)
-            2u -> version = Int64Encoding.decode(wireType, buf, ctx)
+            1u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    domain = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            2u -> {
+                val res = Int64Encoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    version = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -280,10 +336,10 @@ public data class OperatorSetIdProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): OperatorSetIdProto {
-            val msg = OperatorSetIdProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<OperatorSetIdProto> =
+            io.github.kotlinmania.prost.decode(buf) { OperatorSetIdProto() }
+
+        public fun decode(bytes: ByteArray): Result<OperatorSetIdProto> =
+            io.github.kotlinmania.prost.decode(bytes) { OperatorSetIdProto() }
     }
 }

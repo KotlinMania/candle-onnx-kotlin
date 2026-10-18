@@ -8,6 +8,7 @@ import io.github.kotlinmania.candle.Shape
 import io.github.kotlinmania.candle.Tensor
 import io.github.kotlinmania.candle.Var
 import io.github.kotlinmania.candle.bail
+import io.github.kotlinmania.candle.cat
 import io.github.kotlinmania.candle.conv1d
 import io.github.kotlinmania.candle.conv2d
 import io.github.kotlinmania.candle.fromRawBuffer
@@ -17,13 +18,13 @@ import io.github.kotlinmania.candlenn.PReLU
 import io.github.kotlinmania.candlenn.VarBuilder
 import io.github.kotlinmania.candlenn.VarMap
 import io.github.kotlinmania.candlenn.lstm
-import io.github.kotlinmania.candlenn.ops.hardSigmoid
-import io.github.kotlinmania.candlenn.ops.leakyRelu
-import io.github.kotlinmania.candlenn.ops.logSoftmax
-import io.github.kotlinmania.candlenn.ops.selu
-import io.github.kotlinmania.candlenn.ops.sigmoid
-import io.github.kotlinmania.candlenn.ops.softmax
-import io.github.kotlinmania.candlenn.ops.softmaxLastDim
+import io.github.kotlinmania.candlenn.hardSigmoid
+import io.github.kotlinmania.candlenn.leakyRelu
+import io.github.kotlinmania.candlenn.logSoftmax
+import io.github.kotlinmania.candlenn.selu
+import io.github.kotlinmania.candlenn.sigmoid
+import io.github.kotlinmania.candlenn.softmax
+import io.github.kotlinmania.candlenn.softmaxLastDim
 import io.github.kotlinmania.candleonnx.onnx.AttributeProto
 import io.github.kotlinmania.candleonnx.onnx.GraphProto
 import io.github.kotlinmania.candleonnx.onnx.ModelProto
@@ -234,11 +235,11 @@ public fun getTensor(t: TensorProto, name: String): Tensor {
             val dt = dtype(dataType)
                 ?: bail("unsupported 'value' data-type $dataType for $name")
             if (dt == DType.F32 && t.floatData.isNotEmpty()) {
-                Tensor.fromSlice(t.floatData.toFloatArray(), Shape(dims.toIntArray()), Device.Cpu)
+                Tensor.fromSlice(t.floatData.toFloatArray(), Shape(dims), Device.Cpu)
             } else if (dt == DType.F64 && t.doubleData.isNotEmpty()) {
-                Tensor.fromSlice(t.doubleData.toDoubleArray(), Shape(dims.toIntArray()), Device.Cpu)
+                Tensor.fromSlice(t.doubleData.toDoubleArray(), Shape(dims), Device.Cpu)
             } else if (dt == DType.I64 && t.int64Data.isNotEmpty()) {
-                Tensor.fromSlice(t.int64Data.toLongArray(), Shape(dims.toIntArray()), Device.Cpu)
+                Tensor.fromSlice(t.int64Data.toLongArray(), Shape(dims), Device.Cpu)
             } else {
                 fromRawBuffer(t.rawData, dt, dims.toIntArray(), Device.Cpu).unwrap()
             }
@@ -333,7 +334,7 @@ public fun simpleEval_(
                 val input0 = get(node.input[0])
                 val input1 = get(node.input[1])
                 val exp = try {
-                    toScalarFlexible<Double>(input1.toDType(DType.F64))
+                    toScalarFlexible<Double>(input1.toDtype(DType.F64))
                 } catch (_: Exception) {
                     null
                 }
@@ -438,7 +439,7 @@ public fun simpleEval_(
             }
             "Dropout" -> {
                 val input = get(node.input[0])
-                values[node.output[0]] = input.clone()
+                values[node.output[0]] = input
             }
             "MaxPool" -> {
                 val dilations = getAttrOpt<List<Long>>(node, "dilations")
@@ -517,7 +518,7 @@ public fun simpleEval_(
                 val targetShapeObj = Shape(targetShape)
                 val normalized = xs
                     .broadcastSub(runningMean.reshape(targetShapeObj))
-                    .broadcastDiv((runningVar.reshape(targetShapeObj) + eps.toDouble()).sqrt())
+                    .broadcastDiv(runningVar.reshape(targetShapeObj).affine(1.0, eps.toDouble()).sqrt())
                 val w = weight.reshape(targetShapeObj)
                 val b = bias.reshape(targetShapeObj)
                 val out = normalized.broadcastMul(w).broadcastAdd(b)
@@ -540,7 +541,7 @@ public fun simpleEval_(
             "ConstantOfShape" -> {
                 val input = get(node.input[0])
                 val value = getAttrOptOwned<Tensor>(node, "value")
-                    ?: Tensor.zeros(Shape.scalar(), DType.F32, Device.Cpu)
+                    ?: Tensor.zeros(Shape.SCALAR, DType.F32, Device.Cpu)
                 val shapeVec = input.toVec1<Long>().map { it.toInt() }
                 val xs = Tensor.ones(Shape(shapeVec), value.dtype(), input.device()).broadcastMul(value)
                 values[node.output[0]] = xs
@@ -584,10 +585,10 @@ public fun simpleEval_(
                 val axis = xs.normalizeAxis(axisI64)
 
                 val zeros = Tensor.zeros(indices.shape(), indices.dtype(), indices.device())
-                val max = Tensor.new(longArrayOf(xs.dim(axis).toLong()), Shape.scalar(), indices.device())
-                    .toDType(indices.dtype())
+                val max = Tensor.new(longArrayOf(xs.dim(axis).toLong()), Shape(1), indices.device())
+                    .toDtype(indices.dtype())
                 val mask = indices.lt(zeros)
-                val normIndices = mask.toDType(indices.dtype()).broadcastMul(max).add(indices)
+                val normIndices = mask.toDtype(indices.dtype()).broadcastMul(max).add(indices)
 
                 val out = when (normIndices.dims().size) {
                     0 -> {
@@ -620,10 +621,10 @@ public fun simpleEval_(
                     bail("axis ($axisI64) out of accepted range [-rank, rank-1] which was [-$rank, ${rank - 1}]")
                 }
                 val zeros = Tensor.zeros(indices.shape(), indices.dtype(), indices.device())
-                val max = Tensor.new(longArrayOf(data.dims()[axis].toLong()), Shape.scalar(), indices.device())
-                    .toDType(indices.dtype())
+                val max = Tensor.new(longArrayOf(data.dims()[axis].toLong()), Shape(1), indices.device())
+                    .toDtype(indices.dtype())
                 val mask = indices.lt(zeros)
-                val normIndices = mask.toDType(indices.dtype()).broadcastMul(max).add(indices)
+                val normIndices = mask.toDtype(indices.dtype()).broadcastMul(max).add(indices)
                 values[node.output[0]] = data.gather(normIndices, axis)
             }
             "Shape" -> {
@@ -640,7 +641,7 @@ public fun simpleEval_(
             "Size" -> {
                 val data = get(node.input[0])
                 val size = data.elemCount().toLong()
-                val output = Tensor.fromSlice(longArrayOf(size), Shape.scalar(), data.device())
+                val output = Tensor.fromSlice(longArrayOf(size), Shape.SCALAR, data.device())
                 values[node.output[0]] = output
             }
             "Sqrt" -> {
@@ -659,13 +660,13 @@ public fun simpleEval_(
                         toVec0Flexible<UByte>(limit).toLong(),
                         toVec0Flexible<UByte>(delta).toLong(),
                         Device.Cpu,
-                    ).toDType(DType.U8)
+                    ).toDtype(DType.U8)
                     DType.U32 -> arangeStep(
                         toVec0Flexible<UInt>(start).toLong(),
                         toVec0Flexible<UInt>(limit).toLong(),
                         toVec0Flexible<UInt>(delta).toLong(),
                         Device.Cpu,
-                    ).toDType(DType.U32)
+                    ).toDtype(DType.U32)
                     DType.I64 -> arangeStep(
                         toVec0Flexible<Long>(start),
                         toVec0Flexible<Long>(limit),
@@ -677,7 +678,7 @@ public fun simpleEval_(
                         toVec0Flexible<Float>(limit).toDouble(),
                         toVec0Flexible<Float>(delta).toDouble(),
                         Device.Cpu,
-                    ).toDType(start.dtype())
+                    ).toDtype(start.dtype())
                     DType.F64 -> arangeStep(
                         toVec0Flexible<Double>(start),
                         toVec0Flexible<Double>(limit),
@@ -718,7 +719,7 @@ public fun simpleEval_(
                 values[node.output[0]] = output
             }
             "Min" -> {
-                var output = get(node.input[0]).clone()
+                var output = get(node.input[0])
                 for (input in node.input) {
                     output = output.broadcastMinimum(get(input))
                 }
@@ -751,15 +752,15 @@ public fun simpleEval_(
                 val ys = when (ws.rank()) {
                     3 -> {
                         val (padsVal, xsPadded) = when {
-                            pads == null -> Pair(0, xs.clone())
-                            pads.size == 1 -> Pair(pads[0].toInt(), xs.clone())
+                            pads == null -> Pair(0, xs)
+                            pads.size == 1 -> Pair(pads[0].toInt(), xs)
                             pads.size == 2 -> {
                                 val p1 = pads[0].toInt()
                                 val p2 = pads[1].toInt()
                                 if (p1 != p2) {
                                     Pair(0, xs.padWithZeros(2, p1, p2))
                                 } else {
-                                    Pair(p1, xs.clone())
+                                    Pair(p1, xs)
                                 }
                             }
                             else -> bail("more pads than expected in conv1d $pads ${node.name}")
@@ -778,8 +779,8 @@ public fun simpleEval_(
                     }
                     4 -> {
                         val (padsVal, xsPadded) = when {
-                            pads == null -> Pair(0, xs.clone())
-                            pads.size == 1 -> Pair(pads[0].toInt(), xs.clone())
+                            pads == null -> Pair(0, xs)
+                            pads.size == 1 -> Pair(pads[0].toInt(), xs)
                             pads.size == 4 -> {
                                 val p1 = pads[0].toInt()
                                 val p2 = pads[1].toInt()
@@ -788,7 +789,7 @@ public fun simpleEval_(
                                 if (p1 != p2 || p1 != p3 || p1 != p4) {
                                     Pair(0, xs.padWithZeros(2, p1, p3).padWithZeros(3, p2, p4))
                                 } else {
-                                    Pair(p1, xs.clone())
+                                    Pair(p1, xs)
                                 }
                             }
                             else -> bail("more pads than expected in conv2d $pads ${node.name}")
@@ -830,7 +831,7 @@ public fun simpleEval_(
                 values[node.output[0]] = finalYs
             }
             "Concat" -> {
-                val inputs = node.input.map { n -> get(n).clone() }
+                val inputs = node.input.map { n -> get(n) }
                 val axisI64 = getAttr<Long>(node, "axis")
                 if (inputs.isEmpty()) {
                     bail("empty concat")
@@ -870,7 +871,7 @@ public fun simpleEval_(
             "Neg" -> {
                 val input = get(node.input[0])
                 val output = if (input.dtype() == DType.I64) {
-                    val minusOne = Tensor.new(longArrayOf(-1L), Shape.scalar(), input.device()).broadcastAs(input.shape())
+                    val minusOne = Tensor.new(longArrayOf(-1L), Shape(1), input.device()).broadcastAs(input.shape())
                     input.mul(minusOne)
                 } else {
                     input.neg()
@@ -939,7 +940,7 @@ public fun simpleEval_(
                     null -> bail("unsupported 'to' value $dt for cast ${node.name}")
                     else -> dtype(dtEnum) ?: bail("unsupported 'to' value $dt for cast ${node.name}")
                 }
-                val output = input.toDType(dtypeVal)
+                val output = input.toDtype(dtypeVal)
                 values[node.output[0]] = output
             }
             "CumSum" -> {
@@ -952,7 +953,7 @@ public fun simpleEval_(
                     bail("only reverse == 0 is supported in CumSum")
                 }
                 val input = get(node.input[0])
-                val axis = toVec0Flexible<UInt>(get(node.input[1]).toDType(DType.U32)).toInt()
+                val axis = toVec0Flexible<UInt>(get(node.input[1]).toDtype(DType.U32)).toInt()
                 val output = input.cumsum(axis)
                 values[node.output[0]] = output
             }
@@ -967,7 +968,7 @@ public fun simpleEval_(
             }
             "Identity" -> {
                 val input = get(node.input[0])
-                values[node.output[0]] = input.clone()
+                values[node.output[0]] = input
             }
             "If" -> {
                 val cond = toScalarFlexible<UByte>(get(node.input[0]).get(0)).toInt()
@@ -1001,7 +1002,7 @@ public fun simpleEval_(
 
                 when (mode) {
                     "reflect" -> {
-                        var out = data.clone()
+                        var out = data
                         for (i in data.dims().indices.reversed()) {
                             val dim = data.dims()[i]
                             if (padsPre[i] == 0L && padsPost[i] == 0L) {
@@ -1020,7 +1021,7 @@ public fun simpleEval_(
                                 val idxList = zigzag(0L, (dim - 1).toLong()).drop(skip).take(count).toList()
                                 Tensor.fromSlice(idxList.toLongArray(), Shape(idxList.size), out.device())
                             } else {
-                                Tensor.full(0L, Shape(dim), out.device())
+                                Tensor.zeros(Shape(dim), DType.I64, out.device())
                             }
                             out = out.indexSelect(idxTensor, i)
                         }
@@ -1053,7 +1054,7 @@ public fun simpleEval_(
                     else -> bail("Slice node is invalid, expected 3-5 inputs, got ${node.input.size}: $node")
                 }
 
-                var out = data.clone()
+                var out = data
                 val axesVec = axes.toVec1<Long>()
                 for ((i, rawAxis) in axesVec.withIndex()) {
                     val axis = (if (rawAxis < 0) rawAxis + data.rank().toLong() else rawAxis).toInt()
@@ -1108,14 +1109,14 @@ public fun simpleEval_(
                 }
 
                 val output = if (axes != null) {
-                    var result = input.clone()
+                    var result = input
                     for (axis in axes.reversed()) {
                         result = if (keepdims) result.maxKeepdim(axis) else result.max(axis)
                     }
                     result
                 } else {
                     if (getAttrOpt<Long>(node, "noop_with_empty_axes") == 1L) {
-                        input.clone()
+                        input
                     } else {
                         var result = input.flattenAll()
                         if (keepdims) {
@@ -1175,14 +1176,14 @@ public fun simpleEval_(
                 }
 
                 val output = if (axes != null) {
-                    var result = input.clone()
+                    var result = input
                     for (axis in axes.reversed()) {
                         result = if (keepdims) result.minKeepdim(axis) else result.min(axis)
                     }
                     result
                 } else {
                     if (getAttrOpt<Long>(node, "noop_with_empty_axes") == 1L) {
-                        input.clone()
+                        input
                     } else {
                         var result = input.flattenAll()
                         if (keepdims) {
@@ -1242,11 +1243,11 @@ public fun simpleEval_(
             "Tile" -> {
                 val input = get(node.input[0])
                 val repeats = get(node.input[1]).toVec1<Long>()
-                var result = input.clone()
+                var result = input
                 for ((dim, repeat) in repeats.withIndex()) {
                     if (repeat > 1L) {
                         val repeatInt = repeat.toInt()
-                        val tensors = (0 until repeatInt).map { result.clone() }
+                        val tensors = (0 until repeatInt).map { result }
                         result = Tensor.cat(tensors, dim)
                     }
                 }
@@ -1290,7 +1291,7 @@ public fun simpleEval_(
             "RandomUniform", "RandomNormal" -> {
                 val randomType = node.opType
                 val dt = getAttrOpt<Long>(node, "dtype") ?: 1L
-                val dtEnum = TensorProto.DataType.fromI32(dt.toInt())
+                val dtEnum = TensorProto.DataType.fromValue(dt.toInt())
                 val dtypeVal = when (dtEnum) {
                     TensorProto.DataType.UINT8, TensorProto.DataType.UINT32, TensorProto.DataType.INT64 -> {
                         bail("unsupported 'dtype' value $dtEnum, only floats are allowed, for $randomType ${node.name}")
@@ -1307,11 +1308,11 @@ public fun simpleEval_(
                 val output = if (randomType == "RandomUniform") {
                     val low = getAttrOpt<Float>(node, "low") ?: 0.0f
                     val high = getAttrOpt<Float>(node, "high") ?: 1.0f
-                    Tensor.rand(low, high, shapeObj, Device.Cpu).toDType(dtypeVal)
+                    Tensor.rand(low, high, shapeObj, Device.Cpu).toDtype(dtypeVal)
                 } else {
                     val mean = getAttrOpt<Float>(node, "mean") ?: 0.0f
                     val scale = getAttrOpt<Float>(node, "scale") ?: 1.0f
-                    Tensor.randn(mean, scale, shapeObj, Device.Cpu).toDType(dtypeVal)
+                    Tensor.randn(mean, scale, shapeObj, Device.Cpu).toDtype(dtypeVal)
                 }
                 values[node.output[0]] = output
             }
@@ -1329,7 +1330,7 @@ public fun simpleEval_(
                     bail("select_last_index for ArgMin is currently not supported")
                 }
                 val output = if (keepdims) input.argminKeepdim(axis) else input.argmin(axis)
-                values[node.output[0]] = output.toDType(DType.I64)
+                values[node.output[0]] = output.toDtype(DType.I64)
             }
             "ArgMax" -> {
                 val input = get(node.input[0])
@@ -1345,7 +1346,7 @@ public fun simpleEval_(
                     bail("select_last_index for ArgMin is currently not supported")
                 }
                 val output = if (keepdims) input.argmaxKeepdim(axis) else input.argmax(axis)
-                values[node.output[0]] = output.toDType(DType.I64)
+                values[node.output[0]] = output.toDtype(DType.I64)
             }
             "LeakyRelu" -> {
                 val input = get(node.input[0])
@@ -1366,12 +1367,12 @@ public fun simpleEval_(
                 val c = get(node.input[2])
                 val alpha = getAttrOpt<Float>(node, "alpha") ?: 1.0f
                 val beta = getAttrOpt<Float>(node, "beta") ?: 1.0f
-                val alphaTensor = Tensor.new(floatArrayOf(alpha), Shape.scalar(), Device.Cpu).broadcastAs(a.shape())
-                val betaTensor = Tensor.new(floatArrayOf(beta), Shape.scalar(), Device.Cpu).broadcastAs(c.shape())
+                val alphaTensor = Tensor.new(floatArrayOf(alpha), Shape.SCALAR, Device.Cpu).broadcastAs(a.shape())
+                val betaTensor = Tensor.new(floatArrayOf(beta), Shape.SCALAR, Device.Cpu).broadcastAs(c.shape())
                 val transA = getAttrOpt<Long>(node, "transA") ?: 0L
                 val transB = getAttrOpt<Long>(node, "transB") ?: 0L
-                val matA = if (transA == 0L) a.clone() else a.t()
-                val matB = if (transB == 0L) b.clone() else b.t()
+                val matA = if (transA == 0L) a else a.t()
+                val matB = if (transB == 0L) b else b.t()
                 val output = matA.broadcastMul(alphaTensor).broadcastMatmul(matB).broadcastAdd(c.broadcastMul(betaTensor))
                 values[node.output[0]] = output
             }
@@ -1563,7 +1564,7 @@ public fun simpleEval_(
                         .add(wb.unsqueeze(0))
                         .add(rb.unsqueeze(0))
                     val activatedH = chooseActivation(activations[0], hStep)
-                    hList.add(activatedH.clone())
+                    hList.add(activatedH)
                     hT = activatedH
                 }
                 val hStack = Tensor.stack(hList, 0)
@@ -1572,21 +1573,29 @@ public fun simpleEval_(
                 values[node.output[1]] = hT.reshape(Shape(numDirections, batchSize, hiddenSize.toInt()))
             }
             "Xor" -> {
-                val a = get(node.input[0]).gt(0.toUByte())
-                val b = get(node.input[1]).gt(0.toUByte())
-                val out = a.broadcastAdd(b).eq(1.toUByte())
+                val input0 = get(node.input[0])
+                val input1 = get(node.input[1])
+                val a = input0.gt(input0.zerosLike())
+                val b = input1.gt(input1.zerosLike())
+                val sum = a.broadcastAdd(b)
+                val out = sum.eq(sum.onesLike())
                 values[node.output[0]] = out
             }
             "And" -> {
-                val a = get(node.input[0]).gt(0.toUByte())
-                val b = get(node.input[1]).gt(0.toUByte())
+                val input0 = get(node.input[0])
+                val input1 = get(node.input[1])
+                val a = input0.gt(input0.zerosLike())
+                val b = input1.gt(input1.zerosLike())
                 val out = a.broadcastMul(b)
                 values[node.output[0]] = out
             }
             "Or" -> {
-                val a = get(node.input[0]).gt(0.toUByte())
-                val b = get(node.input[1]).gt(0.toUByte())
-                val out = a.broadcastAdd(b).gt(0.toUByte())
+                val input0 = get(node.input[0])
+                val input1 = get(node.input[1])
+                val a = input0.gt(input0.zerosLike())
+                val b = input1.gt(input1.zerosLike())
+                val sum = a.broadcastAdd(b)
+                val out = sum.gt(sum.zerosLike())
                 values[node.output[0]] = out
             }
             "Sign" -> {
@@ -1714,7 +1723,7 @@ public fun simpleEval_(
                             }
                         }
                     }
-                    Tensor.fromSlice(data, Shape(n, m), input.device()).toDType(input.dtype())
+                    Tensor.fromSlice(data, Shape(n, m), input.device()).toDtype(input.dtype())
                 } else if (upper == 0L) {
                     Tensor.tril2(maxDim, input.dtype(), input.device())
                 } else {
@@ -1730,7 +1739,7 @@ public fun simpleEval_(
             }
             "ScatterND" -> {
                 val data = get(node.input[0])
-                val indices = get(node.input[1]).toDType(DType.I64)
+                val indices = get(node.input[1]).toDtype(DType.I64)
                 val updates = get(node.input[2])
                 val reduction = getAttrOpt<String>(node, "reduction") ?: "none"
                 val indicesShape = indices.dims()
@@ -1766,7 +1775,7 @@ public fun simpleEval_(
                         flattened.reshape(Shape(expectedUpdatesShape))
                     }
                 } else {
-                    updates.clone()
+                    updates
                 }
 
                 var flatOutput = data.flattenAll()
@@ -1882,7 +1891,7 @@ public fun broadcastShapeFromMany(shapes: List<List<Int>>): List<Int> {
  */
 public inline fun <reified T> toScalarFlexible(t: Tensor): T {
     return if (t.rank() > 0 && t.elemCount() == 1) {
-        t.flattenAll().i(0).toScalar<T>()
+        t.flattenAll().get(0).toScalar<T>()
     } else {
         t.toScalar<T>()
     }
@@ -1893,7 +1902,7 @@ public inline fun <reified T> toScalarFlexible(t: Tensor): T {
  */
 public inline fun <reified T> toVec0Flexible(t: Tensor): T {
     return if (t.rank() > 0 && t.elemCount() == 1) {
-        t.flattenAll().i(0).toVec0<T>()
+        t.flattenAll().get(0).toVec0<T>()
     } else {
         t.toVec0<T>()
     }

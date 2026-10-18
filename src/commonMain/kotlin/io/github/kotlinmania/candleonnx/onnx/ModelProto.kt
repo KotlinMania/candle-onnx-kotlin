@@ -42,25 +42,88 @@ public data class ModelProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> irVersion = Int64Encoding.decode(wireType, buf, ctx)
-            2u -> producerName = StringEncoding.decode(wireType, buf, ctx)
-            3u -> producerVersion = StringEncoding.decode(wireType, buf, ctx)
-            4u -> domain = StringEncoding.decode(wireType, buf, ctx)
-            5u -> modelVersion = Int64Encoding.decode(wireType, buf, ctx)
-            6u -> docString = StringEncoding.decode(wireType, buf, ctx)
+            1u -> {
+                val res = Int64Encoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    irVersion = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            2u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    producerName = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            3u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    producerVersion = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            4u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    domain = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            5u -> {
+                val res = Int64Encoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    modelVersion = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            6u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    docString = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
             7u -> {
                 val g = graph ?: GraphProto().also { graph = it }
                 MessageEncoding.merge(wireType, g, buf, ctx)
             }
-            8u -> opsetImport.add(MessageEncoding.decode(wireType, OperatorSetIdProto(), buf, ctx))
-            14u -> metadataProps.add(MessageEncoding.decode(wireType, StringStringEntryProto(), buf, ctx))
-            20u -> trainingInfo.add(MessageEncoding.decode(wireType, TrainingInfoProto(), buf, ctx))
-            25u -> functions.add(MessageEncoding.decode(wireType, FunctionProto(), buf, ctx))
+            8u -> {
+                val op = OperatorSetIdProto()
+                val res = MessageEncoding.merge(wireType, op, buf, ctx)
+                if (res.isSuccess) {
+                    opsetImport.add(op)
+                    Result.success(Unit)
+                } else res
+            }
+            14u -> {
+                val prop = StringStringEntryProto()
+                val res = MessageEncoding.merge(wireType, prop, buf, ctx)
+                if (res.isSuccess) {
+                    metadataProps.add(prop)
+                    Result.success(Unit)
+                } else res
+            }
+            20u -> {
+                val ti = TrainingInfoProto()
+                val res = MessageEncoding.merge(wireType, ti, buf, ctx)
+                if (res.isSuccess) {
+                    trainingInfo.add(ti)
+                    Result.success(Unit)
+                } else res
+            }
+            25u -> {
+                val fn = FunctionProto()
+                val res = MessageEncoding.merge(wireType, fn, buf, ctx)
+                if (res.isSuccess) {
+                    functions.add(fn)
+                    Result.success(Unit)
+                } else res
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -93,10 +156,10 @@ public data class ModelProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): ModelProto {
-            val msg = ModelProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<ModelProto> =
+            io.github.kotlinmania.prost.decode(buf) { ModelProto() }
+
+        public fun decode(bytes: ByteArray): Result<ModelProto> =
+            io.github.kotlinmania.prost.decode(bytes) { ModelProto() }
     }
 }

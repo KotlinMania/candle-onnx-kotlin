@@ -33,18 +33,58 @@ public data class NodeProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> StringEncoding.decodeRepeated(wireType, input, buf, ctx)
-            2u -> StringEncoding.decodeRepeated(wireType, output, buf, ctx)
-            3u -> name = StringEncoding.decode(wireType, buf, ctx)
-            4u -> opType = StringEncoding.decode(wireType, buf, ctx)
-            5u -> attribute.add(MessageEncoding.decode(wireType, AttributeProto(), buf, ctx))
-            6u -> docString = StringEncoding.decode(wireType, buf, ctx)
-            7u -> domain = StringEncoding.decode(wireType, buf, ctx)
+            1u -> StringEncoding.mergeRepeated(wireType, input, buf, ctx)
+            2u -> StringEncoding.mergeRepeated(wireType, output, buf, ctx)
+            3u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    name = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            4u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    opType = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            5u -> {
+                val attr = AttributeProto()
+                val res = MessageEncoding.merge(wireType, attr, buf, ctx)
+                if (res.isSuccess) {
+                    attribute.add(attr)
+                    Result.success(Unit)
+                } else {
+                    res
+                }
+            }
+            6u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    docString = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
+            7u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    domain = res.getOrThrow()
+                    Result.success(Unit)
+                } else {
+                    Result.failure(res.exceptionOrNull()!!)
+                }
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -69,10 +109,10 @@ public data class NodeProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): NodeProto {
-            val msg = NodeProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<NodeProto> =
+            io.github.kotlinmania.prost.decode(buf) { NodeProto() }
+
+        public fun decode(bytes: ByteArray): Result<NodeProto> =
+            io.github.kotlinmania.prost.decode(bytes) { NodeProto() }
     }
 }

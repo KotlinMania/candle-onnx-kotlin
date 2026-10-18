@@ -13,12 +13,12 @@ public data class GraphProto(
     var node: MutableList<NodeProto> = mutableListOf(),
     var name: String = "",
     var initializer: MutableList<TensorProto> = mutableListOf(),
-    var sparseInitializer: MutableList<SparseTensorProto> = mutableListOf(),
     var docString: String = "",
     var input: MutableList<ValueInfoProto> = mutableListOf(),
     var output: MutableList<ValueInfoProto> = mutableListOf(),
     var valueInfo: MutableList<ValueInfoProto> = mutableListOf(),
     var quantizationAnnotation: MutableList<TensorAnnotation> = mutableListOf(),
+    var sparseInitializer: MutableList<SparseTensorProto> = mutableListOf(),
 ) : Message {
     override fun encodeRaw(buf: BufMut) {
         if (node.isNotEmpty()) MessageEncoding.encodeRepeated(1u, node, buf)
@@ -41,24 +41,80 @@ public data class GraphProto(
         wireType: WireType,
         buf: Buf,
         ctx: DecodeContext,
-    ) {
+    ): Result<Unit> =
         when (tag) {
-            1u -> node.add(MessageEncoding.decode(wireType, NodeProto(), buf, ctx))
-            2u -> name = StringEncoding.decode(wireType, buf, ctx)
-            5u -> initializer.add(MessageEncoding.decode(wireType, TensorProto(), buf, ctx))
-            10u -> docString = StringEncoding.decode(wireType, buf, ctx)
-            11u -> input.add(MessageEncoding.decode(wireType, ValueInfoProto(), buf, ctx))
-            12u -> output.add(MessageEncoding.decode(wireType, ValueInfoProto(), buf, ctx))
-            13u -> valueInfo.add(MessageEncoding.decode(wireType, ValueInfoProto(), buf, ctx))
-            14u -> quantizationAnnotation.add(
-                MessageEncoding.decode(wireType, TensorAnnotation(), buf, ctx),
-            )
-            15u -> sparseInitializer.add(
-                MessageEncoding.decode(wireType, SparseTensorProto(), buf, ctx),
-            )
+            1u -> {
+                val n = NodeProto()
+                val res = MessageEncoding.merge(wireType, n, buf, ctx)
+                if (res.isSuccess) {
+                    node.add(n)
+                    Result.success(Unit)
+                } else res
+            }
+            2u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    name = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            5u -> {
+                val t = TensorProto()
+                val res = MessageEncoding.merge(wireType, t, buf, ctx)
+                if (res.isSuccess) {
+                    initializer.add(t)
+                    Result.success(Unit)
+                } else res
+            }
+            10u -> {
+                val res = StringEncoding.merge(wireType, buf, ctx)
+                if (res.isSuccess) {
+                    docString = res.getOrThrow()
+                    Result.success(Unit)
+                } else Result.failure(res.exceptionOrNull()!!)
+            }
+            11u -> {
+                val v = ValueInfoProto()
+                val res = MessageEncoding.merge(wireType, v, buf, ctx)
+                if (res.isSuccess) {
+                    input.add(v)
+                    Result.success(Unit)
+                } else res
+            }
+            12u -> {
+                val v = ValueInfoProto()
+                val res = MessageEncoding.merge(wireType, v, buf, ctx)
+                if (res.isSuccess) {
+                    output.add(v)
+                    Result.success(Unit)
+                } else res
+            }
+            13u -> {
+                val v = ValueInfoProto()
+                val res = MessageEncoding.merge(wireType, v, buf, ctx)
+                if (res.isSuccess) {
+                    valueInfo.add(v)
+                    Result.success(Unit)
+                } else res
+            }
+            14u -> {
+                val qa = TensorAnnotation()
+                val res = MessageEncoding.merge(wireType, qa, buf, ctx)
+                if (res.isSuccess) {
+                    quantizationAnnotation.add(qa)
+                    Result.success(Unit)
+                } else res
+            }
+            15u -> {
+                val st = SparseTensorProto()
+                val res = MessageEncoding.merge(wireType, st, buf, ctx)
+                if (res.isSuccess) {
+                    sparseInitializer.add(st)
+                    Result.success(Unit)
+                } else res
+            }
             else -> skipField(wireType, tag, buf, ctx)
         }
-    }
 
     override fun encodedLen(): Int {
         var len = 0
@@ -91,10 +147,10 @@ public data class GraphProto(
     }
 
     public companion object {
-        public fun decode(bytes: ByteArray): GraphProto {
-            val msg = GraphProto()
-            msg.merge(Buf.wrap(bytes))
-            return msg
-        }
+        public fun decode(buf: Buf): Result<GraphProto> =
+            io.github.kotlinmania.prost.decode(buf) { GraphProto() }
+
+        public fun decode(bytes: ByteArray): Result<GraphProto> =
+            io.github.kotlinmania.prost.decode(bytes) { GraphProto() }
     }
 }

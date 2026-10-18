@@ -60,6 +60,8 @@ public data class TensorProto(
         public fun asStrName(): String = name
 
         public companion object {
+            public fun fromI32(value: Int): DataType? = fromValue(value)
+
             public fun fromValue(value: Int): DataType? =
                 entries.firstOrNull { it.value == value }
 
@@ -77,6 +79,8 @@ public data class TensorProto(
         ;
 
         public companion object {
+            public fun fromI32(value: Int): DataLocation? = fromValue(value)
+
             public fun fromValue(value: Int): DataLocation? =
                 entries.firstOrNull { it.value == value }
         }

@@ -35,8 +35,6 @@ public data class AttributeProto(
 ) : Message {
     public fun type(): AttributeType = type
 
-    public fun r#type(): AttributeType = type
-
     public enum class AttributeType(
         public val value: Int,
     ) {
@@ -58,6 +56,8 @@ public data class AttributeProto(
         ;
 
         public companion object {
+            public fun fromI32(value: Int): AttributeType? = fromValue(value)
+
             public fun fromValue(value: Int): AttributeType? =
                 entries.firstOrNull { it.value == value }
         }
